@@ -8,10 +8,12 @@ use Bio::SeqIO;
 require File::Temp;
 use File::Temp ();
 use File::Temp qw/ :seekable /;
+use Getopt::Long;
+
 
 #### Constants, adjust for each run #############
 my $TSD_CONSENSUS = "NNNNNNNN"; #"N" for any base, case sensitive except for N
-my $TSD_SUBSTITIONS = 2; #maximum number of bp differences allowed between TSDs, not counting insertions symbol
+my $TSD_SUBSTITUTIONS = 2; #maximum number of bp differences allowed between TSDs, not counting insertions symbol
 my $TSD_INSERTIONS = 1; #maximum number of insertions allowed in TSDs, at the moment only 0 or 1 are allowed
 my $TSD_DELETIONS = 1; #maximum number of deletions allowed in TSDs, at the moment only 0 or 1 are allowed
 my $TSD_MAX_INDELS = 1; #maximum number of allowed indels 
@@ -171,10 +173,12 @@ while (my $seq = $infasta->next_seq) {
 #compare the tsds given the similarity paramters provided as constants
 sub testsds {
 	my($tsd1p, $tsd2p, $seq) = @_; #position of left and right tsds as well as sequence and variation parameters
+	my $tsd1_seq = substr($seq,$tsd1p,length $TSD_CONSENSUS); #sequence of the TSDs
+	my $tsd2_seq = substr($seq,$tsd2p,length $TSD_CONSENSUS);
 
 	#test that both tsds match the consensus
-	unless (substr($seq,$tsd1p,length $TSD_CONSENSUS) =~ /$tsd_regex/) {return (0)};
-	unless (substr($seq,$tsd2p,length $TSD_CONSENSUS) =~ /$tsd_regex/) {return (0)};
+	unless ($tsd1_seq =~ /$tsd_regex/) {return (0)};
+	unless ($tsd2_seq =~ /$tsd_regex/) {return (0)};
 
 	#setup hashes that will hold original tsd sequences and all permutations with indels as key, value is the number of changes (i.e. indels made)
 	my %tsd1; #tsds on the left side of the ORF
@@ -220,9 +224,9 @@ sub testsds {
 			    $bpchanges++;
 			}
 		    }
-		    last if ($bpchanges > $TSD_SUBSTITIONS); #leave the loop early if past number of allowed changes
+		    last if ($bpchanges > $TSD_SUBSTITUTIONS); #leave the loop early if past number of allowed changes
 		}
-		if ($bpchanges <= $TSD_SUBSTITIONS) { #found a match, woot!
+		if ($bpchanges <= $TSD_SUBSTITUTIONS) { #found a match, woot!
 		    return (1, $seq1, $seq2);
 		} 
 	    }
