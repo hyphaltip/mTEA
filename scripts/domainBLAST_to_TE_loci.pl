@@ -155,7 +155,7 @@ sub run_exonerate {
     if( $sensitive ) {
 	$region = '--exhaustive';
     }
-    my $exe = "/usr/local/bin/exonerate -m protein2genome -q $query -t $outname.fa $region --ryo \"##startCDS\n>%ti %tab..%tae (%tcl nt)\n%tcs\n##endCDS\n\"";
+    my $exe = "exonerate -m protein2genome -q $query -t $outname.fa $region --ryo \"##startCDS\n>%ti %tab..%tae (%tcl nt)\n%tcs\n##endCDS\n\"";
     
     open(my $ofh => "$exe |") || die $!;
     my $cds;
