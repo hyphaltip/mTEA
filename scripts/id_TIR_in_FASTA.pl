@@ -6,7 +6,7 @@
 # all the FASTA sequences, calculate how close potential TSD/TIR regions are to the edge of similarity, 3) takes all 
 # information for each TSD/TIR location and calculate a "score" indicating how likely it is to be real, output the results. 
 #
-# This script assumes that the following programs are installed and availbe by within the local directory:
+# This script assumes that the following programs are installed and available by within the local directory:
 # BLAST+ (command `blastn ...`)
 # BLAT (command `blat ... `)
 # CLUSTALW2 (command `clustalw2 ...`)
@@ -21,7 +21,7 @@ require File::Temp;
 use File::Temp ();
 use File::Temp qw/ :seekable /;
 use Getopt::Long;
-use List::Util qw[min max];
+use List::Util qw(min max);
 #use Time::Seconds;
 
 # setup and test constants # 
@@ -200,25 +200,20 @@ while (my $seq = $infasta->next_seq) {
 		
 	    	#evaluate all TSD pairs
 	    	foreach my $ltsd (@leftp_tsds) {
-			foreach my $rtsd (@rightp_tsds) {
-				my($test_tsd_outcome, $tsd_identity, $tir_identity, $left_tir_seq, $right_tir_seq)
-											 = testsds($ltsd, $rtsd, $seq->seq());
-												# test for
-												# possible tsd+tir
-												# identity between the 
-												# left and right ends
-				if($test_tsd_outcome) { 
-					$hypo{$hindex}[0] = $fastatitle;
-		 			$hypo{$hindex}[1] = $ltsd;
-					$hypo{$hindex}[2] = $rtsd;
-					$hypo{$hindex}[3] = $tsd_identity;
-					$hypo{$hindex}[4] = $tir_identity;
-					$hypo{$hindex}[7] = $left_tir_seq;
-					$hypo{$hindex}[8] = $right_tir_seq;
-					$hindex++;
-		    		}
+		    foreach my $rtsd (@rightp_tsds) {
+			my($test_tsd_outcome, $tsd_identity, $tir_identity, $left_tir_seq, $right_tir_seq)
+			    = testsds($ltsd, $rtsd, $seq->seq());
+			# test for
+			# possible tsd+tir
+			# identity between the 
+			# left and right ends
+			if($test_tsd_outcome) {
+			    $hypo{$hindex} = [($fastatitle,$ltsd,$rtsd,$tsd_identity,$tir_identity,undef,undef, #5,6 are blank?
+					       $left_tir_seq,$right_tir_seq)];
+			    $hindex++;
+			}
 
-			}		
+		    }		
 		}		
 	}	
 	#cleanup 
@@ -229,9 +224,9 @@ while (my $seq = $infasta->next_seq) {
 
 #record tir frequencies
 foreach my $index (keys %hypo) {
-	$hypo{$index}[9] = scalar(@{$left_tirfreq{$hypo{$index}[7]}});
-	$hypo{$index}[10] = scalar(@{$right_tirfreq{$hypo{$index}[8]}});	
-} 
+    push @{$hypo{$index}}, scalar(@{$left_tirfreq{$hypo{$index}->[7]}});
+    push @{$hypo{$index}}, scalar(@{$right_tirfreq{$hypo{$index}->[8]}});	
+}
 
 #### PART 2. Identify conserved sequences between the input files and record if possible TSD+TIR locations are near the 
 #### edge, update values in %hypo
@@ -239,65 +234,55 @@ foreach my $index (keys %hypo) {
 # TODO: the code below is redundant (running BLAT on left then right) could be tidied up
 
 #run blat and interpret blat output for each line on left side
-`blat $leftseqs_filename $leftseqs_filename $blatoutput_filename`; #run blat
-open (my $fh => $blatoutput_filename) or die $!;
-<$fh>;
-<$fh>;
-<$fh>;
-<$fh>;
-<$fh>;
+open(my $fh => "blat $leftseqs_filename $leftseqs_filename stdout |") || die "cannot run BLAT: $!"; #run blat
+# skip first 5 lines
+for (0..4) {
+    <$fh>;
+}
+
 while (<$fh>) {
-	my ($match, $miss, $rep, $N, $qc, $qb, $tc, $tb, $strand, $q_name, 
-	    $q_size, $q_start, $q_end, $t_name, $t_size, $t_start, $t_end) 
-	    = split;
-	unless ($q_name eq $t_name) { #avoid looking at self matches
-		foreach my $index (keys %hypo) { #run through all possible locations
-			if (($hypo{$index}[0]) eq $q_name) {
-				my $distance = min( abs($q_start - $hypo{$index}[1]), abs($t_start - $hypo{$index}[1]));
-				if (exists $hypo{$index}[5]) {
-					if ($distance < $hypo{$index}[5]) {
-						$hypo{$index}[5] = $distance;
-					}
-				}
-				else {
-					$hypo{$index}[5] = $distance;
-				}
-			} 
-		}
+    my ($match, $miss, $rep, $N, $qc, $qb, $tc, $tb, $strand, $q_name, 
+	$q_size, $q_start, $q_end, $t_name, $t_size, $t_start, $t_end) 
+	= split;
+    unless ($q_name eq $t_name) { #avoid looking at self matches
+	foreach my $index (keys %hypo) { #run through all possible locations
+	    if (($hypo{$index}[0]) eq $q_name) {
+		my $distance = min( abs($q_start - $hypo{$index}[1]), abs($t_start - $hypo{$index}[1]));
+		# can replace 
+		$hypo{$index}->[5] = ! exists $hypo{$index}->[5] ? $distance : min($hypo{$index}->[5],$distance);
+	    } 
 	}
+    }
 }
 close $fh;
 
 #run blat and interpret blat output for each line on right side
-`blat $rightseqs_filename $rightseqs_filename $blatoutput_filename`; #run blat
+open($fh => "blat $rightseqs_filename $rightseqs_filename stdout |") || die "Cannot run BLAT: $!"; #run blat
 #print "$blatoutput_filename\n";
-open ($fh => $blatoutput_filename) or die $!;
-<$fh>;
-<$fh>;
-<$fh>;
-<$fh>;
-<$fh>;
+for (0..4) { # skip first 5 lines which are header
+    <$fh>;
+}
 while (<$fh>) {
-	my ($match, $miss, $rep, $N, $qc, $qb, $tc, $tb, $strand, $q_name, 
-	    $q_size, $q_start, $q_end, $t_name, $t_size, $t_start, $t_end) 
-	    = split;
-	unless ($q_name eq $t_name) { #avoid looking at self matches
-		foreach my $index (keys %hypo) { #run through all possible locations
-			my $adj_q_end = $q_end + $startright{$hypo{$index}[0]}; #adjusted because right side
-			my $adj_t_end = $t_end + $startright{$hypo{$index}[0]};
-			if (($hypo{$index}[0]) eq $q_name) {
-				my $distance = min( abs($adj_q_end - $hypo{$index}[2]), abs($adj_t_end - $hypo{$index}[2]));
-				if (exists $hypo{$index}[6]) {
-					if ($distance < $hypo{$index}[6]) {
-						$hypo{$index}[6] = $distance;
-					}
-				}
-				else {
-					$hypo{$index}[6] = $distance;
-				}
-			} 
+    my ($match, $miss, $rep, $N, $qc, $qb, $tc, $tb, $strand, $q_name, 
+	$q_size, $q_start, $q_end, $t_name, $t_size, $t_start, $t_end) 
+	= split;
+    unless ($q_name eq $t_name) { #avoid looking at self matches
+	foreach my $index (keys %hypo) { #run through all possible locations
+	    my $adj_q_end = $q_end + $startright{$hypo{$index}[0]}; #adjusted because right side
+	    my $adj_t_end = $t_end + $startright{$hypo{$index}[0]};
+	    if (($hypo{$index}[0]) eq $q_name) {
+		my $distance = min( abs($adj_q_end - $hypo{$index}[2]), abs($adj_t_end - $hypo{$index}[2]));
+		if (exists $hypo{$index}[6]) {
+		    if ($distance < $hypo{$index}[6]) {
+			$hypo{$index}[6] = $distance;
+		    }
 		}
+		else {
+		    $hypo{$index}[6] = $distance;
+		}
+	    } 
 	}
+    }
 }
 close $fh;
 close BLAT1;
@@ -310,62 +295,66 @@ close BLAT2;
 my %final_score; # holds the potential element index as key and the final score as value
 
 # how important each fator is, weights should add up to 100
-my %factor_weight = ("tsd_id", 16.7, "tir_id", 16.7, "distance_left", 16.7, "distance_right", 16.7, "num_tsd_left", 16.7, "num_tsd_right", 16.7);
-foreach my $index (keys %hypo) { 
-	# calculate each factor out of 100
-	my $tsdid = $hypo{$index}[3] * 100; # tsd similarity
-	my $tirid = $hypo{$index}[4] * 100; # tir similarity
-	my $dist_left;  # left distance to conserved edge determined in STEP2
-	if ($hypo{$index}[5] <= 2) {
-		$dist_left = 100;
-	}
-	elsif ($hypo{$index}[4] <= 10) {
-		$dist_left = 50;
-	}
-	else {
-		$dist_left = 0;
-	}
+my %factor_weight = ("tsd_id"         => 16.7, 
+		     "tir_id"         => 16.7, 
+		     "distance_left"  => 16.7, 
+		     "distance_right" => 16.7, 
+		     "num_tsd_left"   => 16.7, 
+		     "num_tsd_right"  => 16.7);
 
-	my $dist_right; # right distance to conserved edge determined in STEP2
-	if ($hypo{$index}[6] <= 2) { 
-		$dist_right = 100;
-	}
-	elsif ($hypo{$index}[5] <= 10) {
-		$dist_right = 50;
-	}
-	else {
-		$dist_right = 0;
-	}
+for my $index (keys %hypo) { 
+    # calculate each factor out of 100
+    my $tsdid = $hypo{$index}[3] * 100;	# tsd similarity
+    my $tirid = $hypo{$index}[4] * 100;	# tir similarity
+    my $dist_left; # left distance to conserved edge determined in STEP2
+    if ($hypo{$index}[5] <= 2) {
+	$dist_left = 100;
+    } elsif ($hypo{$index}[4] <= 10) {
+	$dist_left = 50;
+    } else {
+	$dist_left = 0;
+    }
 
-	my $num_tsd_left; # number of different TSDs on the left left 
-	if ($hypo{$index}[9] > 1) { 
-		$num_tsd_left = 100;
-	}
-	else {
-		$num_tsd_left = 0;
-	}
+    my $dist_right; # right distance to conserved edge determined in STEP2
+    if ($hypo{$index}[6] <= 2) { 
+	$dist_right = 100;
+    }
+    elsif ($hypo{$index}[5] <= 10) {
+	$dist_right = 50;
+    }
+    else {
+	$dist_right = 0;
+    }
 
-	my $num_tsd_right; #number of different TSDs on the right
-	if ($hypo{$index}[10] > 1) { 
-		$num_tsd_right = 100;
-	}
-	else {
-		$num_tsd_right = 0;
-	}
+    my $num_tsd_left;	  # number of different TSDs on the left left 
+    if ($hypo{$index}[9] > 1) { 
+	$num_tsd_left = 100;
+    }
+    else {
+	$num_tsd_left = 0;
+    }
 
-	#calculate final score
-	$final_score{$index} = (($factor_weight{"tsd_id"}/100) * $tsdid) +
-		     (($factor_weight{"tir_id"}/100) * $tirid) +
-		     (($factor_weight{"distance_left"}/100) * $dist_left) +
-		     (($factor_weight{"distance_right"}/100) * $dist_right) +
-		     (($factor_weight{"num_tsd_left"}/100) * $num_tsd_left) +
-		     (($factor_weight{"num_tsd_right"}/100) * $num_tsd_left);
+    my $num_tsd_right;		#number of different TSDs on the right
+    if ($hypo{$index}[10] > 1) { 
+	$num_tsd_right = 100;
+    }
+    else {
+	$num_tsd_right = 0;
+    }
+
+    #calculate final score
+    $final_score{$index} = (($factor_weight{"tsd_id"}/100) * $tsdid) +
+	(($factor_weight{"tir_id"}/100) * $tirid) +
+	(($factor_weight{"distance_left"}/100) * $dist_left) +
+	(($factor_weight{"distance_right"}/100) * $dist_right) +
+	(($factor_weight{"num_tsd_left"}/100) * $num_tsd_left) +
+	(($factor_weight{"num_tsd_right"}/100) * $num_tsd_left);
 }
 
-#ouput the results
-foreach my $index (sort { $final_score {$b} <=> $final_score {$a}} keys %final_score )
-{
-	print STDOUT "$final_score{$index}\t$hypo{$index}[0]\t$hypo{$index}[1]\t$hypo{$index}[2]\n";
+#output the results
+# sort by score, greatest to least
+foreach my $index (sort { $final_score {$b} <=> $final_score {$a}} keys %final_score ) {
+    print STDOUT "$final_score{$index}\t$hypo{$index}[0]\t$hypo{$index}[1]\t$hypo{$index}[2]\n";
 }
 
 
@@ -373,44 +362,45 @@ foreach my $index (sort { $final_score {$b} <=> $final_score {$a}} keys %final_s
 ################### SUBROUTINES ###################################
 # compares two sequences that each include a combinaton of a TSD and TIR, returns 0 if they don't match or various paramters if they do
 sub testsds {
-	my($tsd1p, $tsd2p, $seq) = @_; #position of left and right tsds as well as sequence and variation parameters
-	my $tsd1_seq = substr($seq,($tsd1p - (length $TSD_CONSENSUS) - 1),length $TSD_CONSENSUS); #sequence of the TSDs
-	my $tsd2_seq = substr($seq,$tsd2p,length $TSD_CONSENSUS);
-	my $tir1_seq = substr($seq, ($tsd1p - 1), length $TIR_CONSENSUS);
-	my $tir2_seq = rc(substr($seq, $tsd2p - (length $TIR_CONSENSUS), length $TIR_CONSENSUS));
+    my($tsd1p, $tsd2p, $seq) = @_; #position of left and right tsds as well as sequence and variation parameters
+    my $tsd1_seq = substr($seq,($tsd1p - (length $TSD_CONSENSUS) - 1),length $TSD_CONSENSUS); #sequence of the TSDs
+    my $tsd2_seq = substr($seq,$tsd2p,length $TSD_CONSENSUS);
+    my $tir1_seq = substr($seq, ($tsd1p - 1), length $TIR_CONSENSUS);
+    my $tir2_seq = rc(substr($seq, $tsd2p - (length $TIR_CONSENSUS), length $TIR_CONSENSUS));
 
-	# test that the TSDs and TIR match the required consensus
-	unless ($tsd1_seq =~ /$tsd_regex/) {return (0)};
-	unless ($tsd2_seq =~ /$tsd_regex/) {return (0)};
-	unless ($tir1_seq =~ /$tir_regex/) {return (0)};
-	unless ($tir2_seq =~ /$tir_regex/) {return (0)};
+    # test that the TSDs and TIR match the required consensus
+    unless ($tsd1_seq =~ /$tsd_regex/) {return (0)};
+    unless ($tsd2_seq =~ /$tsd_regex/) {return (0)};
+    unless ($tir1_seq =~ /$tir_regex/) {return (0)};
+    unless ($tir2_seq =~ /$tir_regex/) {return (0)};
 
-	# generate the TIR+TSD combinations to test
-	# test using clustalw
-	my $tsd_identities = (align2seq($tsd1_seq, $tsd2_seq) =~ tr/*//);
-	my $tir_identities = (align2seq($tir1_seq, $tir2_seq) =~ tr/*//);
+    # generate the TIR+TSD combinations to test
+    # test using clustalw
+    my $tsd_identities = (align2seq($tsd1_seq, $tsd2_seq) =~ tr/*//);
+    my $tir_identities = (align2seq($tir1_seq, $tir2_seq) =~ tr/*//);
 
-	if ( ($tsd_identities >= ((length $TSD_CONSENSUS) - $TSD_DIFFERENCES)) && ($tir_identities >= ((length $TIR_CONSENSUS) - $TIR_DIFFERENCES)) ) {
+    if ( ($tsd_identities >= ((length $TSD_CONSENSUS) - $TSD_DIFFERENCES)) && ($tir_identities >= ((length $TIR_CONSENSUS) - $TIR_DIFFERENCES)) ) {
 
-		# update the tir frequency hashes
-		unless (grep {$_ eq $tsd1_seq} @{$left_tirfreq{$tir1_seq}}) { # prevents adding the same TSD twice
-			push @{$left_tirfreq{$tir1_seq}}, $tsd1_seq;
-		}
-		unless (grep {$_ eq $tsd2_seq} @{$right_tirfreq{$tir2_seq}}) { # prevents adding the same TSD twice
-			push @{$right_tirfreq{$tir2_seq}}, $tsd2_seq;
-		}
-
-		my $tsd_proportion = $tsd_identities/(length $TSD_CONSENSUS); # measures of identity
-		my $tir_proportion = $tir_identities/(length $TIR_CONSENSUS);
-
-		return (1, $tsd_proportion, $tir_proportion, $tir1_seq, $tir2_seq);
+	# update the tir frequency hashes
+	unless (grep {$_ eq $tsd1_seq} @{$left_tirfreq{$tir1_seq}}) { # prevents adding the same TSD twice
+	    push @{$left_tirfreq{$tir1_seq}}, $tsd1_seq;
 	}
-	else {
-		return (0);
+	unless (grep {$_ eq $tsd2_seq} @{$right_tirfreq{$tir2_seq}}) { # prevents adding the same TSD twice
+	    push @{$right_tirfreq{$tir2_seq}}, $tsd2_seq;
 	}
+
+	my $tsd_proportion = $tsd_identities/(length $TSD_CONSENSUS); # measures of identity
+	my $tir_proportion = $tir_identities/(length $TIR_CONSENSUS);
+
+	return (1, $tsd_proportion, $tir_proportion, $tir1_seq, $tir2_seq);
+    }
+    else {
+	return (0);
+    }
 }
 
 # converts a consensus pattern to a regular expression, could be improved by allowing IUPAC uncertainty codes
+# there is a fairly easy way to do that by grabbing Bio::Tools::IUPAC and going through the blocks for each uncertainty
 sub cons2regx {
     my($consensus) = @_;
     my $pattern;
@@ -428,33 +418,36 @@ sub cons2regx {
 
 #aligns two input sequences and the consensus line of clustalw
 sub align2seq {
-	my($seq1, $seq2) = @_;
+    # why are we using CLUSTALW to find a GLOBAL alignment? 
+    # exonerate or others would be cleaner
+    my($seq1, $seq2) = @_;
 
-	# run clustalw2
-	my $temp_seq3_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.fas' ); # clustalw2 input file
-	my $temp_seq4_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.aln' ); # clustalw2 ouptut file
-	open (SEQ3,">$temp_seq3_filename") or die;
-	print SEQ3 ">s1\n$seq1\n>s2\n$seq2\n";
-	`clustalw2 -INFILE=$temp_seq3_filename -outfile=$temp_seq4_filename`;
+    # run clustalw2
+    my $temp_seq3_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.fas' ); # clustalw2 input file
+    my $temp_seq4_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.aln' ); # clustalw2 ouptut file
+    open (SEQ3,">$temp_seq3_filename") or die;
+    print SEQ3 ">s1\n$seq1\n>s2\n$seq2\n";
+    `clustalw2 -INFILE=$temp_seq3_filename -outfile=$temp_seq4_filename`;
 
-	# parse the output	
-	open (INPUT, $temp_seq4_filename) or die;
+    # parse the output	
+    open (INPUT, $temp_seq4_filename) or die;
+    for ( 0..3 ) {
 	<INPUT>;
-	<INPUT>;
-	<INPUT>;
-	<INPUT>;
-	# determine at what position in the file the alignment starts
-	my $startpos;
-	if (<INPUT> =~ /s2(\s+)\S+/) {
-		$startpos = 2 + length($1);
-	}
-	else {
-		die "error reading clustalw ouptut at line\n";
-	}
-	return(substr(<INPUT>, $startpos, length $seq1));
+    }
+
+    # determine at what position in the file the alignment starts
+    my $startpos;
+    if (<INPUT> =~ /s2(\s+)\S+/) {
+	$startpos = 2 + length($1);
+    }
+    else {
+	die "error reading clustalw ouptut at line\n";
+    }
+    return(substr(<INPUT>, $startpos, length $seq1));
 }
 
 # reverse complement
+# also just grab from Bioperl Bio::PrimarySeqI
 sub rc {
     my ($sequence) = @_;
     $sequence = reverse $sequence;
