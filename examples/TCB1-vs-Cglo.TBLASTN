@@ -1,8 +1,3 @@
-# TBLASTN 2.2.25+
-# Query: TCB1_CAEBR gi|464864|sp|P35072.1|TCB1_CAEBR RecName: Full=Transposable element Tcb1 transposase; AltName: Full=Transposable element Barney transposase
-# Database: chaetomium_globosum_1_supercontigs.fasta
-# Fields: query id, subject id, % identity, alignment length, mismatches, gap opens, q. start, q. end, s. start, s. end, evalue, bit score
-# 35 hits found
 TCB1_CAEBR	cglo_supercontig_1.8	46.36	110	49	4	174	273	358490	358819	8e-18	87.8
 TCB1_CAEBR	cglo_supercontig_1.8	39.45	109	57	2	174	273	357873	358199	9e-17	84.3
 TCB1_CAEBR	cglo_supercontig_1.8	28.57	105	72	2	36	139	369325	369633	8e-10	45.1
@@ -38,4 +33,3 @@ TCB1_CAEBR	cglo_supercontig_1.3	21.03	252	183	7	3	252	4671496	4670783	0.002	40.0
 TCB1_CAEBR	cglo_supercontig_1.3	53.57	28	13	0	196	223	934211	934128	0.50	32.0
 TCB1_CAEBR	cglo_supercontig_1.3	38.24	34	21	0	240	273	3230727	3230626	0.52	32.0
 TCB1_CAEBR	cglo_supercontig_1.3	38.24	34	21	0	240	273	3183700	3183801	0.52	32.0
-# BLAST processed 1 queries
