@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl 
 # Author: Peter Arensburger 
 # Summary: Takes a fasta file and optional orf bounds as input, returns possible TIR and TSD locations as well as an
 # associated score that indicates how "good" the fit is.  Proceedes in three parts: 1) identify all potential TSD/TIR
@@ -22,28 +22,43 @@ use File::Temp ();
 use File::Temp qw/ :seekable /;
 use Getopt::Long;
 use List::Util qw[min max];
-#use Time::Seconds;
+
+use Bio::AlignIO;
+use Bio::Align::DNAStatistics;
+use Bio::Tree::DistanceFactory;
+use Bio::TreeIO;
 
 # setup and test constants # 
+my $fastafilename;
 # TODO: need to test that fasta input names are unique # 
-my $TSD_CONSENSUS = "NNNNNNNN"; #"N" for any base, case sensitive except for N
-# TODO: test that the TIR_CONSENSUS works in real data
+my $TSD_CONSENSUS = "TA"; #"N" for any base, case sensitive except for N
 my $TIR_CONSENSUS = "NNNNNNNNNN";
 my $TIR_DIFFERENCES = 2; #number of differences allowed between the TIR
 my $TSD_DIFFERENCES = 2; #number of differences allowed between the TSD
 my $TSD_SEARCH_LENGTH = "low"; #if set to low then searches for TSDs right around the rev-compl. areas
+my $SCORE_CUTOFF = 60; #possible elements with final score lower than this are not reported
+my $SEQUENCES_OUTPUT_NAME = "seqs.fas"; #name of the ouptut file for sequences
+my $RECORD_MARGIN = 3; #how close two possible elements must be from each other to be considered different
+my $REFSEQ_NAME_FILE; #optional name of file with refference sequences, the output will be renamed to these names if they match
 
-# TODO: test the command line arguments #
 GetOptions(
+    'i|inputfasta:s'     => \$fastafilename,
     'c|tsdconsensus:s'      => \$TSD_CONSENSUS,
     't|tirconsensus:s'   => \$TIR_CONSENSUS,
     'd|tirdifferences:i'      => \$TIR_DIFFERENCES,
     's|tsddifferences:i'       => \$TSD_DIFFERENCES,
     'l|tsdsearchlength:s'     => \$TSD_SEARCH_LENGTH,
-    );
+    'r|scorecutoff:s'     => \$SCORE_CUTOFF,
+    'o|outseqname:s'     => \$SEQUENCES_OUTPUT_NAME,
+    'm|margin:i'         => \$RECORD_MARGIN,
+    'n|seqname:s'        => \$REFSEQ_NAME_FILE
+ );
+
+unless ($fastafilename) {
+	printusage();
+}
 
 # Global variables setup
-
 my %hypo; # hypo = 'hypothesis', this holds information for all identified possible transposon ends, holds an
 	   # index value as key and as value an array with:
 	   # [0] fasta title
@@ -57,6 +72,7 @@ my %hypo; # hypo = 'hypothesis', this holds information for all identified possi
 	   # [8] right TIR sequence
 	   # [9] number of different TSDs adjacent to left TIR
 	   # [10] number of different TSDs adjacent to right TIR
+	   # [11] complete nucleotide sequence of the element
 my $hindex = 0; # index for %hypo
 my $tsd_regex = cons2regx($TSD_CONSENSUS); # regular expression pattern of the TSD_CONSENSUS;
 my $tir_regex = cons2regx($TIR_CONSENSUS); # regular expression pattern of the TIR_CONSENSUS;
@@ -78,12 +94,12 @@ open (BLAT2, ">$rightseqs_filename") or die; # used in PART2 for the BLAT run
 my %orfbounds; # fasta title as key and array of orf boundaries as value
 my %left_tirfreq; # left tir sequences as key and array with all associated TSDs as value
 my %right_tirfreq; # right tir sequences as key and array with all associated TSDs as value
-
-my($fastafilename) = @ARGV;
 my $infasta  = Bio::SeqIO->new(-file => $fastafilename ,
 				  -format => 'fasta');
 while (my $seq = $infasta->next_seq) {
 	my $fastatitle = $seq->display_id; #used for warnings
+	print STDERR "finding elements in sequence $fastatitle\n";
+
 	my $b1;  # left bound of ORF
 	my $b2;  # right bound of ORF
 
@@ -103,7 +119,6 @@ while (my $seq = $infasta->next_seq) {
 		$b1 = $1;
 		$b2 = $2;
 	} else {
-#	    warn("WARNING: no ORF bounds provided for input fasta sequence $fastatitle, looking for TIRs on either side of the middle of the sequence\n");
 	    $b1 = int(($seq->length)/2);
 	    $b2 = int(($seq->length)/2) + 1;
 
@@ -125,7 +140,6 @@ while (my $seq = $infasta->next_seq) {
 	my $seq2 = $seq->subseq($b2,$seq->length);
 	print SEQ1 ">seq1\n$seq1\n";
 	print SEQ2 ">seq2\n$seq2\n";
-
 	print BLAT1 ">$fastatitle\n$seq1\n"; #update BLAT input file used for PART2
 	print BLAT2 ">$fastatitle\n$seq2\n"; #update BLAT input file used for PART2
 
@@ -215,6 +229,8 @@ while (my $seq = $infasta->next_seq) {
 					$hypo{$hindex}[4] = $tir_identity;
 					$hypo{$hindex}[7] = $left_tir_seq;
 					$hypo{$hindex}[8] = $right_tir_seq;
+					$hypo{$hindex}[11] = substr($seq->seq(), $ltsd - 1, ($rtsd - $ltsd) + 1);
+	
 					$hindex++;
 		    		}
 
@@ -362,13 +378,109 @@ foreach my $index (keys %hypo) {
 		     (($factor_weight{"num_tsd_right"}/100) * $num_tsd_left);
 }
 
-#ouput the results
+### STEP 4 print the results ####
+# first print results to temporary file, then decide if need to compare results to known reference sequences
+
+my %recorded_seq; #holds the fasta name as key and as value array with [0] left bound [1] right bound,
+		  #next sequence is [3] left bound, [4] right bound
+
+# print results to temporary file
+my $seqoutput_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.fas' ); #fasta output file, temporary
+open (TEMPOUTPUT, ">$seqoutput_filename") or die $!; #write the results to temporary file 
 foreach my $index (sort { $final_score {$b} <=> $final_score {$a}} keys %final_score )
 {
-	print STDOUT "$final_score{$index}\t$hypo{$index}[0]\t$hypo{$index}[1]\t$hypo{$index}[2]\n";
+	if ($final_score{$index} >= $SCORE_CUTOFF) {
+		#test to see if a sequence close to this one has been reported already
+		my $printok = 1; #boolean 0 if not ok to report this 1 if it is		
+		if (exists $recorded_seq{$hypo{$index}[0]}) { #true if this an element in this fasta file has been reported
+			for (my $i=0; $i <= $#{ $recorded_seq{$hypo{$index}[0]} }; $i=$i+2) { #scroll through all the elements that havee been reported
+				if ((abs ($recorded_seq{$hypo{$index}[0]}[$i]-$hypo{$index}[1]) <= $RECORD_MARGIN) && 
+				    (abs ($recorded_seq{$hypo{$index}[0]}[$i+1]-$hypo{$index}[2]) <= $RECORD_MARGIN) )
+				{
+					$printok = 0; 
+				}
+			}
+		}
+		
+		if ($printok) {
+			print TEMPOUTPUT ">$hypo{$index}[0]:$hypo{$index}[1]-$hypo{$index}[2]", "_", "$final_score{$index}\n$hypo{$index}[11]\n";
+#			$lc++;
+			push @{ $recorded_seq{$hypo{$index}[0]} }, "$hypo{$index}[1]", "$hypo{$index}[2]";
+		}
+	}
 }
 
+# if $REFSEQ_NAME_FILE is set then replace current names with reference names, otherwise just print the results as is
+open (OUTPUT, ">$SEQUENCES_OUTPUT_NAME") or die $!; #final name
+if ($REFSEQ_NAME_FILE) { #test to see if this step should be executed
 
+	print STDERR "Comparing output to provided reference file $REFSEQ_NAME_FILE\n";
+
+	# define constants
+	my $TQSIZEDIFF = 0.05; # how different the size of the targe and query have be to be considered nearly identical
+	my $TQSEQSIM = 0.95; # proportion of squences that must be identical to be considered nearly indentical
+
+	# setup and run blat
+	my $blatoutput_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.blat' ); #blat output file
+	`blat $seqoutput_filename $REFSEQ_NAME_FILE $blatoutput_filename`; #run blat
+
+	# examine the BLAT output and populate %simseq hash with sequence names that are similar between the reference and the output
+	my %simseq; #holds the observed sequence name as key and refference name as value
+
+	open (my $fh => $blatoutput_filename) or die $!;
+	<$fh>;
+	<$fh>;
+	<$fh>;
+	<$fh>;
+	<$fh>;
+	while (<$fh>) {
+		my ($match, $miss, $rep, $N, $qc, $qb, $tc, $tb, $strand, $q_name, 
+		    $q_size, $q_start, $q_end, $t_name, $t_size, $t_start, $t_end) 
+		    = split;
+		my $size_diff_q = (abs($q_size - $t_size))/$q_size; # size difference between target and query compared to query
+		my $size_diff_t = (abs($q_size - $t_size))/$t_size; # size difference between target and query compared to target
+		my $seq_diff_q = $match/$q_size; # sequence difference between target and query compared to query
+		my $seq_diff_t = $match/$t_size; # sequence difference between target and query compared to target
+
+		if ( ($size_diff_q <= $TQSIZEDIFF) && ($size_diff_t <= $TQSIZEDIFF) && ($seq_diff_q >= $TQSEQSIM) && ($seq_diff_t >= $TQSEQSIM) ) {
+			my $short_t_name;
+			if ($t_name =~ /(.+)_\S+?$/) {
+				$simseq{$1} = $q_name;
+			}
+			else {
+				die "error4\n$t_name\n";
+			}
+		}
+	}	
+	close $fh;
+	#open the output file and return the file with name changes
+	open (INPUT, $seqoutput_filename) or die $!;
+	while (my $line = <INPUT>) {
+		if ($line =~ />(\S+)(_\S+?)\s$/) {
+			my $seqname = $1;
+			my $score = $2;
+			if (exists $simseq{$seqname}) {
+				print OUTPUT ">$seqname", "_" , $simseq{$seqname} , "$score\n";
+			}
+			else {
+				print OUTPUT "$line";
+			}
+		}
+		else {
+			print OUTPUT "$line";
+		}
+	}
+	close INPUT;
+}
+else {
+	open (INPUT, $seqoutput_filename) or die $!;
+	while (my $line = <INPUT>) {
+		print OUTPUT "$line";
+	}
+	close INPUT;
+}
+close TEMPOUTPUT;
+close OUTPUT;
 
 ################### SUBROUTINES ###################################
 # compares two sequences that each include a combinaton of a TSD and TIR, returns 0 if they don't match or various paramters if they do
@@ -460,4 +572,21 @@ sub rc {
     $sequence = reverse $sequence;
     $sequence =~ tr/ACGTRYMKSWacgtrymksw/TGCAYRKMWStgcayrkmws/;
     return ($sequence);
+}
+
+#print usage
+sub printusage {
+	print "usage: perl id_TIR_in_FASTA -i <input fasta file>\n";
+	print "optional variables:\n";
+	print "\t-o <ouput file name>, default $SEQUENCES_OUTPUT_NAME\n";
+	print "\t-n <fasta file with reference sequences> used to rename found sequences to known elements\n";
+	print "\t--- running parameters ---\n";
+	print "\t-c <TSD consensus> Target Site Duplication consensus (use N for any base), default $TSD_CONSENSUS\n";
+	print "\t-t <TIR consensus> Terminal Inverted Repeat consensus (use N for any base), default $TIR_CONSENSUS\n";
+	print "\t-d <max number of differences allowed between TIRs> default $TIR_DIFFERENCES\n";
+	print "\t-s <max number of differences allowed between TSDs> default $TSD_DIFFERENCES\n";
+	print "\t-l how deep to look for TSDs burried in repeated sequences set to \"low\", \"very low\", or \"high\", default $TSD_SEARCH_LENGTH\n";
+	print "\t-r <min SCORE needed to report results> default $SCORE_CUTOFF\n";
+	print "\t-m <min distance between the boundaries of two nested elements to report them> default $RECORD_MARGIN\n";
+	die();
 }
