@@ -1,0 +1,45 @@
+# TBLASTN 2.0MP-WashU [04-May-2006] [linux26-x64-I32LPF64 2006-05-10T17:22:28]
+# Start: 10:05:28 PM PDT Oct 17, 2011
+# Parameters:
+#   links
+#   mformat=3
+#   -i ../Tcb1.fa
+#   -d chaetomium_globosum_1_supercontigs.fasta
+#   wordmask=seg+xnu
+#   E=1e-8
+#   hspsepsmax=100
+#   hspmax=5000
+#   -o ../TCB1-vs-Cglo.wuTBLASTN
+# Database: chaetomium_globosum_1_supercontigs.fasta
+#   Title: chaetomium_globosum_1_supercontigs.fasta
+#   Posted: 10:04:41 PM PDT Oct 17, 2011
+#   Created: 10:04:41 PM PDT Oct 17, 2011
+#   Letters: 34,886,939
+#   Records: 37
+# Query: TCB1_CAEBR gi|464864|sp|P35072.1|TCB1_CAEBR RecName: Full=Transposable element Tcb1 transposase; AltName: Full=Transposable element Barney transposase
+# Fields: qid	sid	E	N	Sprime	S	alignlen	nident	npos	nmism	pcident	pcpos	qgaps	qgaplen	sgaps	sgaplen	qframe	qstart	qend	sframe	sstart	send	links
+TCB1_CAEBR	cglo_supercontig_1.8	2.3e-18	1	85.67	229	110	51	64	49	46.36	58.18	4	10	0	0	+0	174	273	+2	358490	358819	(1)
+TCB1_CAEBR	cglo_supercontig_1.8	3.0e-16	1	78.63	209	109	44	62	56	40.37	56.88	3	9	0	0	+0	174	273	+3	357873	358199	(2)
+TCB1_CAEBR	cglo_supercontig_1.8	1.2e-10	2	45.19	114	109	32	49	73	29.36	44.95	1	1	2	3	+0	32	139	+1	369316	369633	(3)-4
+TCB1_CAEBR	cglo_supercontig_1.8	1.2e-10	2	39.20	97	107	29	48	74	27.10	44.86	1	2	2	2	+0	169	273	+2	369914	370228	3-(4)
+TCB1_CAEBR	cglo_supercontig_1.5	2.3e-16	1	78.98	210	238	67	107	161	28.15	44.96	4	6	3	4	+0	37	268	+2	4173215	4173916	(1)
+TCB1_CAEBR	cglo_supercontig_1.5	3.7e-14	2	48.71	124	109	34	48	74	31.19	44.04	0	0	1	1	+0	31	139	+3	1445691	1446014	(2)-3
+TCB1_CAEBR	cglo_supercontig_1.5	3.7e-14	2	47.30	120	154	42	71	104	27.27	46.10	3	4	3	4	+0	119	268	+3	1446147	1446596	2-(3)
+TCB1_CAEBR	cglo_supercontig_1.5	3.3e-17	1	81.80	218	242	68	113	163	28.10	46.69	4	6	4	5	+0	33	268	-3	4144758	4144048	(4)
+TCB1_CAEBR	cglo_supercontig_1.5	1.8e-16	1	79.33	211	257	74	114	160	28.79	44.36	7	18	4	5	+0	33	271	-2	2006308	2005553	(5)
+TCB1_CAEBR	cglo_supercontig_1.5	3.0e-16	1	78.63	209	109	44	62	56	40.37	56.88	3	9	0	0	+0	174	273	-3	2963490	2963164	(6)
+TCB1_CAEBR	cglo_supercontig_1.2	3.4e-11	2	59.62	155	84	36	50	39	42.86	59.52	3	9	0	0	+0	198	272	+1	4636378	4636629	2-(1)
+TCB1_CAEBR	cglo_supercontig_1.2	3.4e-11	2	24.77	56	80	22	32	48	27.50	40.00	0	0	4	10	+0	120	199	+1	4635970	4636179	(2)-1
+TCB1_CAEBR	cglo_supercontig_1.2	5.4e-17	1	81.09	216	109	45	64	55	41.28	58.72	3	9	0	0	+0	174	273	-2	1815924	1815598	(3)
+TCB1_CAEBR	cglo_supercontig_1.6	2.3e-16	1	78.98	210	238	67	107	161	28.15	44.96	4	6	3	4	+0	37	268	+3	1280703	1281404	(1)
+TCB1_CAEBR	cglo_supercontig_1.6	9.7e-15	2	50.82	130	109	36	48	72	33.03	44.04	0	0	1	1	+0	31	139	-3	1141896	1141573	(2)-3
+TCB1_CAEBR	cglo_supercontig_1.6	9.7e-15	2	46.95	119	154	43	69	103	27.92	44.81	3	4	3	4	+0	119	268	-3	1141440	1140991	2-(3)
+TCB1_CAEBR	cglo_supercontig_1.7	3.0e-16	1	78.63	209	109	44	62	56	40.37	56.88	3	9	0	0	+0	174	273	+1	2075701	2076027	(1)
+TCB1_CAEBR	cglo_supercontig_1.7	7.9e-16	1	77.22	205	109	44	63	56	40.37	57.80	3	9	0	0	+0	174	273	-3	2819188	2818862	(2)
+TCB1_CAEBR	cglo_supercontig_1.1	7.9e-14	2	53.99	139	50	23	32	27	46.00	64.00	0	0	0	0	+0	174	223	+1	6295069	6295218	(1)-2
+TCB1_CAEBR	cglo_supercontig_1.1	7.9e-14	2	40.26	100	42	20	28	21	47.62	66.67	1	1	0	0	+0	233	273	+1	6295471	6295596	1-(2)
+TCB1_CAEBR	cglo_supercontig_1.1	3.0e-16	1	78.63	209	109	44	62	56	40.37	56.88	3	9	0	0	+0	174	273	-3	406780	406454	(3)
+TCB1_CAEBR	cglo_supercontig_1.3	6.2e-14	2	54.34	140	50	23	32	27	46.00	64.00	0	0	0	0	+0	174	223	-2	976709	976560	(1)-2
+TCB1_CAEBR	cglo_supercontig_1.3	6.2e-14	2	40.26	100	42	20	28	21	47.62	66.67	1	1	0	0	+0	233	273	-2	976307	976182	1-(2)
+TCB1_CAEBR	cglo_supercontig_1.4	1.0e-12	2	54.69	141	51	26	32	24	50.98	62.75	1	1	0	0	+0	174	223	+3	3458568	3458720	(1)-2
+TCB1_CAEBR	cglo_supercontig_1.4	1.0e-12	2	35.68	87	37	18	23	19	48.65	62.16	0	0	0	0	+0	237	273	+2	3458789	3458899	1-(2)
