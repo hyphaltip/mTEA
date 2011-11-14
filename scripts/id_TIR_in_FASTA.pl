@@ -39,7 +39,7 @@ my $TSD_SEARCH_LENGTH = "low"; #if set to low then searches for TSDs right aroun
 my $SCORE_CUTOFF = 60; #possible elements with final score lower than this are not reported
 my $SEQUENCES_OUTPUT_NAME = "seqs.fas"; #name of the ouptut file for sequences
 my $RECORD_MARGIN = 3; #how close two possible elements must be from each other to be considered different
-my $REFSEQ_NAME_FILE; #optional name of file with refference sequences, the output will be renamed to these names if they match
+#my $REFSEQ_NAME_FILE; #optional name of file with refference sequences, the output will be renamed to these names if they match
 
 GetOptions(
     'i|inputfasta:s'     => \$fastafilename,
@@ -51,7 +51,7 @@ GetOptions(
     'r|scorecutoff:s'     => \$SCORE_CUTOFF,
     'o|outseqname:s'     => \$SEQUENCES_OUTPUT_NAME,
     'm|margin:i'         => \$RECORD_MARGIN,
-    'n|seqname:s'        => \$REFSEQ_NAME_FILE
+#    'n|seqname:s'        => \$REFSEQ_NAME_FILE
  );
 
 unless ($fastafilename) {
@@ -98,7 +98,7 @@ my $infasta  = Bio::SeqIO->new(-file => $fastafilename ,
 				  -format => 'fasta');
 while (my $seq = $infasta->next_seq) {
 	my $fastatitle = $seq->display_id; #used for warnings
-	print STDERR "finding elements in sequence $fastatitle\n";
+	print STDERR "finding TSDs and TIRs in sequence $fastatitle\n";
 
 	my $b1;  # left bound of ORF
 	my $b2;  # right bound of ORF
@@ -114,8 +114,8 @@ while (my $seq = $infasta->next_seq) {
 	    warn("WARNING: fasta sequence $fastatitle appears to contain a mixture of upper and lower case letters and/or characters other than A,C,G,T,N.  These will all be treated as separate characters\n");
 	}
 
-	# check for ORF bounds, if none split the sequence down the middle
-	if($seq->display_id =~ /_(\d+)_(\d+)$/) {
+	# check for ORF bounds, look boundaries at the end of the name otherwise just split down the middle
+	if($seq->display_id =~ /_(\d+)_(\d+)\s$/) {
 		$b1 = $1;
 		$b2 = $2;
 	} else {
@@ -255,6 +255,7 @@ foreach my $index (keys %hypo) {
 # TODO: the code below is redundant (running BLAT on left then right) could be tidied up
 
 #run blat and interpret blat output for each line on left side
+print STDERR "finding conserve sequences on the left side\n";
 `blat $leftseqs_filename $leftseqs_filename $blatoutput_filename`; #run blat
 open (my $fh => $blatoutput_filename) or die $!;
 <$fh>;
@@ -285,6 +286,7 @@ while (<$fh>) {
 close $fh;
 
 #run blat and interpret blat output for each line on right side
+print STDERR "finding conserved sequences on the right side\n";
 `blat $rightseqs_filename $rightseqs_filename $blatoutput_filename`; #run blat
 #print "$blatoutput_filename\n";
 open ($fh => $blatoutput_filename) or die $!;
@@ -379,21 +381,19 @@ foreach my $index (keys %hypo) {
 }
 
 ### STEP 4 print the results ####
-# first print results to temporary file, then decide if need to compare results to known reference sequences
-
 my %recorded_seq; #holds the fasta name as key and as value array with [0] left bound [1] right bound,
 		  #next sequence is [3] left bound, [4] right bound
 
 # print results to temporary file
-my $seqoutput_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.fas' ); #fasta output file, temporary
-open (TEMPOUTPUT, ">$seqoutput_filename") or die $!; #write the results to temporary file 
+#my $seqoutput_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.fas' ); #fasta output file, temporary
+open (OUTPUT, ">$SEQUENCES_OUTPUT_NAME") or die $!; #o output file 
 foreach my $index (sort { $final_score {$b} <=> $final_score {$a}} keys %final_score )
 {
 	if ($final_score{$index} >= $SCORE_CUTOFF) {
 		#test to see if a sequence close to this one has been reported already
 		my $printok = 1; #boolean 0 if not ok to report this 1 if it is		
 		if (exists $recorded_seq{$hypo{$index}[0]}) { #true if this an element in this fasta file has been reported
-			for (my $i=0; $i <= $#{ $recorded_seq{$hypo{$index}[0]} }; $i=$i+2) { #scroll through all the elements that havee been reported
+			for (my $i=0; $i <= $#{ $recorded_seq{$hypo{$index}[0]} }; $i=$i+2) { #scroll through all the elements that have been reported
 				if ((abs ($recorded_seq{$hypo{$index}[0]}[$i]-$hypo{$index}[1]) <= $RECORD_MARGIN) && 
 				    (abs ($recorded_seq{$hypo{$index}[0]}[$i+1]-$hypo{$index}[2]) <= $RECORD_MARGIN) )
 				{
@@ -401,85 +401,33 @@ foreach my $index (sort { $final_score {$b} <=> $final_score {$a}} keys %final_s
 				}
 			}
 		}
-		
 		if ($printok) {
-			print TEMPOUTPUT ">$hypo{$index}[0]:$hypo{$index}[1]-$hypo{$index}[2]", "_", "$final_score{$index}\n$hypo{$index}[11]\n";
-#			$lc++;
+			if ($hypo{$index}[0] =~ /^(.+)_(\S+):(\d+)\.\.(\d+)_/) {
+				my $element = $1;
+				my $contig = $2;				
+				my $scb1 = $3; #contig bound1
+				my $scb2 = $4; #contig bound2
+				my $lefttirpos; #keeps the position of the TIR in the genome
+				my $rightirpos; #keeps the position of the TIR in the genome
+				if ($scb1 < $scb2) { 
+					$lefttirpos = $scb1 + $hypo{$index}[1] - 1;
+					$rightirpos = $scb1 + $hypo{$index}[2] - 1;
+				}
+				else {
+					$lefttirpos = $scb1 - $hypo{$index}[1] + 1;
+					$rightirpos = $scb1 - $hypo{$index}[2] + 1;
+					
+				}	
+				print OUTPUT ">$element", "-", $contig, ":", $lefttirpos, "..", "$rightirpos", "_" , "$final_score{$index}", "\n", "$hypo{$index}[11]", "\n";	
+			}
+			else {
+				die("unexpected fasta title format: $hypo{$index}[0] \n");
+			}
+#			print OUTPUT ">$hypo{$index}[0]:$hypo{$index}[1]-$hypo{$index}[2]", "_", "$final_score{$index}\n$hypo{$index}[11]\n";
 			push @{ $recorded_seq{$hypo{$index}[0]} }, "$hypo{$index}[1]", "$hypo{$index}[2]";
 		}
 	}
 }
-
-# if $REFSEQ_NAME_FILE is set then replace current names with reference names, otherwise just print the results as is
-open (OUTPUT, ">$SEQUENCES_OUTPUT_NAME") or die $!; #final name
-if ($REFSEQ_NAME_FILE) { #test to see if this step should be executed
-
-	print STDERR "Comparing output to provided reference file $REFSEQ_NAME_FILE\n";
-
-	# define constants
-	my $TQSIZEDIFF = 0.05; # how different the size of the targe and query have be to be considered nearly identical
-	my $TQSEQSIM = 0.95; # proportion of squences that must be identical to be considered nearly indentical
-
-	# setup and run blat
-	my $blatoutput_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.blat' ); #blat output file
-	`blat $seqoutput_filename $REFSEQ_NAME_FILE $blatoutput_filename`; #run blat
-
-	# examine the BLAT output and populate %simseq hash with sequence names that are similar between the reference and the output
-	my %simseq; #holds the observed sequence name as key and refference name as value
-
-	open (my $fh => $blatoutput_filename) or die $!;
-	<$fh>;
-	<$fh>;
-	<$fh>;
-	<$fh>;
-	<$fh>;
-	while (<$fh>) {
-		my ($match, $miss, $rep, $N, $qc, $qb, $tc, $tb, $strand, $q_name, 
-		    $q_size, $q_start, $q_end, $t_name, $t_size, $t_start, $t_end) 
-		    = split;
-		my $size_diff_q = (abs($q_size - $t_size))/$q_size; # size difference between target and query compared to query
-		my $size_diff_t = (abs($q_size - $t_size))/$t_size; # size difference between target and query compared to target
-		my $seq_diff_q = $match/$q_size; # sequence difference between target and query compared to query
-		my $seq_diff_t = $match/$t_size; # sequence difference between target and query compared to target
-
-		if ( ($size_diff_q <= $TQSIZEDIFF) && ($size_diff_t <= $TQSIZEDIFF) && ($seq_diff_q >= $TQSEQSIM) && ($seq_diff_t >= $TQSEQSIM) ) {
-			my $short_t_name;
-			if ($t_name =~ /(.+)_\S+?$/) {
-				$simseq{$1} = $q_name;
-			}
-			else {
-				die "error4\n$t_name\n";
-			}
-		}
-	}	
-	close $fh;
-	#open the output file and return the file with name changes
-	open (INPUT, $seqoutput_filename) or die $!;
-	while (my $line = <INPUT>) {
-		if ($line =~ />(\S+)(_\S+?)\s$/) {
-			my $seqname = $1;
-			my $score = $2;
-			if (exists $simseq{$seqname}) {
-				print OUTPUT ">$seqname", "_" , $simseq{$seqname} , "$score\n";
-			}
-			else {
-				print OUTPUT "$line";
-			}
-		}
-		else {
-			print OUTPUT "$line";
-		}
-	}
-	close INPUT;
-}
-else {
-	open (INPUT, $seqoutput_filename) or die $!;
-	while (my $line = <INPUT>) {
-		print OUTPUT "$line";
-	}
-	close INPUT;
-}
-close TEMPOUTPUT;
 close OUTPUT;
 
 ################### SUBROUTINES ###################################
@@ -547,7 +495,7 @@ sub align2seq {
 	my $temp_seq4_filename = File::Temp->new( UNLINK => 1, SUFFIX => '.aln' ); # clustalw2 ouptut file
 	open (SEQ3,">$temp_seq3_filename") or die;
 	print SEQ3 ">s1\n$seq1\n>s2\n$seq2\n";
-	`clustalw2 -INFILE=$temp_seq3_filename -outfile=$temp_seq4_filename`;
+	`clustalw -INFILE=$temp_seq3_filename -outfile=$temp_seq4_filename`;
 
 	# parse the output	
 	open (INPUT, $temp_seq4_filename) or die;
@@ -588,5 +536,5 @@ sub printusage {
 	print "\t-l how deep to look for TSDs burried in repeated sequences set to \"low\", \"very low\", or \"high\", default $TSD_SEARCH_LENGTH\n";
 	print "\t-r <min SCORE needed to report results> default $SCORE_CUTOFF\n";
 	print "\t-m <min distance between the boundaries of two nested elements to report them> default $RECORD_MARGIN\n";
-	die();
+	exit;
 }
